@@ -34,7 +34,7 @@
 	
 	# output match history file 
 	fout: .asciiz "Assignment\\history.txt"
-	#define	
+	# define	
 	.eqv 		ARRAY_SIZE 	7
 	.eqv 		DATA_MAP_SIZE	4
 	.eqv 		DATA_HIT_SIZE 		1
@@ -85,7 +85,14 @@
 	error3: 		.asciiz "setShips(): Error detected when selecting map for set ships\n"
 	
 	# MACRO part
-
+.macro confirmBox(%str)
+	.data 
+		prompt: .asciiz %str
+	.text 
+		li $v0, 50
+		la $a0, prompt
+		syscall
+.end_macro
 .macro writeCordinateToFile(%str, %len)
         .text 
             addi $sp, $sp, -12
@@ -187,23 +194,30 @@
 .data 
 	label: .asciiz %str
 .text
-	addi $sp, $sp, -8
+	addi $sp, $sp, -12
 	sw $a1, 0($sp)
 	sw $s2, 4($sp)
+	sw $a2, 8($sp)
 read:	
 	lw $a1, 0($sp)
 	printMap(%stypeOutput) #<-
 	jal alignInputFunction
 	#print greeting
-	li $v0, 4
-	la $a0, label #<-
-	syscall
+	#li $v0, 4
+	#la $a0, label #<-
+	#syscall
 
 	# read data
-	li $v0, 8
-	la $a0, input
-	li $a1, 32
-	syscall
+	#li $v0, 8
+	#la $a0, input
+	#li $a1, 32
+	#syscall
+	
+	li $v0, 54          
+    	la $a0, label          
+    	la $a1, input       
+    	li $a2, 32        
+    	syscall
 	
 	# use $s2 to store address of input
 	la $s2, input
@@ -239,7 +253,9 @@ errorInputCatch:
  	 j read
  	 
 returnArray:
-	bne $t1, 10, errorInputCatch
+	bne $t1, '\n', errorInputCatch
+	li $t1, '\0'
+	sb $t1, 0($s2)
 	addi $sp, $sp, -4
 	sw $t0, 0($sp)
 	li $t0, %sizeInput
@@ -249,9 +265,10 @@ returnArray:
 ignoreWrite:
 	lw $t0, 0($sp)
 	addi $sp, $sp, 4
+	lw $a2, 8($sp)
 	lw $s2, 4($sp)
 	lw $a1, 0($sp)
-	addi $sp, $sp, 8
+	addi $sp, $sp, 12
 	
 .end_macro
 #----------------------End getInput--------------------------------------------#
@@ -492,7 +509,7 @@ main:
 	li $a1, 1 
 	jal setShips
 	
-	changeScene("\t\t\t\t\t                                     GAME START!\n")
+	changeScene("\t\t\t\t\t                                         GAME START!\n")
 	
 	jal gameProcess
 	
@@ -535,7 +552,7 @@ gameProcess:
 	li $t8, 6 #player1
 	li $t9, 6 # player2 
 player1GotoHit:
-	changeScene("\t\t\t\t\t                                            Player 1 FIRE\n")
+	changeScene("\t\t\t\t\t                                         Player 1 FIRE\n")
 	
 	jal clearScreenFunction
 	
@@ -551,7 +568,7 @@ player1GotoHit:
 	subi $t9, $t9, 1 
 	beq $t9, 0, endGame1
 player2GotoHit:
-	changeScene("\t\t\t\t\t                                           Player 2 FIRE\n")
+	changeScene("\t\t\t\t\t                                        Player 2 FIRE\n")
 	jal clearScreenFunction
 	
 	li $a1, 2
@@ -597,7 +614,7 @@ checkSinkAndSet:
 	lw $a2, 0($t0)
 	lw $a3, 4($t0)
 	
-	writeCordinateToFile($t0, 3)
+	#writeCordinateToFile($t0, 3)
 	
 	jal access
 	move $t9, $v0
@@ -648,7 +665,10 @@ missFire:
 	lw $a3, 4($t0)
 	addi $s1, $zero, 'x'
 	addi $a1, $a1, 2
+	jal access
+	beq $v0, 'o', missFire1
 	jal setMap
+missFire1:
 	changeScene("\t\t\t\t\t                                             MISS\n")
 	li $v0, 0
 exitCheckHitAndSet:
@@ -686,13 +706,16 @@ player1turn:
 player2turn: 
 	la $s0, player2map
 choosingMode:
-	jal clearScreenFunction
-	printPrompt("\t\t\t\t\t                    Do you want to use random mode for set ship?( 0 : NO |  1 : YES )\n")
-	jal alignInputFunction
+	#jal clearScreenFunction
+	#printPrompt("\t\t\t\t\t                    Do you want to use random mode for set ship?( 0 : NO |  1 : YES )\n")
+	#jal alignInputFunction
 	
-	li $v0, 5
-	syscall
-	move $s7, $v0
+	#li $v0, 5
+	#syscall
+	#move $s7, $v0
+	
+	confirmBox("Do you want to use random mode for set ship?")
+	move $s7, $a0
 
 set2x1Ships:
 	jal clearScreenFunction
@@ -706,8 +729,8 @@ set2x1ShipsError:
 	syscall
 
 	li $s2, 2 				#Set size ship and value to set
-	beq $s7, 1, randomMode1
-	bne $s7, 0, choosingMode
+	beq $s7, 0, randomMode1
+	bne $s7, 1, choosingMode
 	# read data from user
 	getInput(7, 1,"\nPls type coordinates of the bow and the stern of the ship  (ex: 0 1 4 1): ")
 	# check 
@@ -734,7 +757,7 @@ set3x1ShipsError:
 	syscall
 	
 	li $s2, 3
-	beq $s7, 1, randomMode2
+	beq $s7, 0, randomMode2
 	getInput(7, 1,"\nPls type coordinates of the bow and the stern of the ship  (ex: 0 1 4 1): ")
 	jal checkLegalShipAndSet
 	j nextSet2
@@ -753,7 +776,7 @@ set4x1ShipsError:
 	syscall
 	
 	li $s2, 4	
-	beq $s7, 1, randomMode3
+	beq $s7, 0, randomMode3
 	getInput(7, 1,"\nPls type coordinates of the bow and the stern of the ship  (ex: 0 1 4 1): ")
 
 	jal checkLegalShipAndSet
@@ -774,16 +797,11 @@ nextSet3:
 	syscall
 
 setShipAgain:	
-	jal clearScreenFunction
-	printPrompt("\t\t\t\t\t                    Do you want to reset map and set ship again?( 0 : NO |  1 : YES )\n")
-	jal adjustToMidScreen
-	# reset all ship and set again
-	li $v0, 5
-	syscall
-	move $t1, $v0
+	confirmBox("Do you want to reset map and set ship again?")
+	move $t1, $a0
 	
-	beq $t1, 0, exitSetShip
-	bne $t1, 1, setShipAgain
+	beq $t1, 1, exitSetShip
+	bne $t1, 0, setShipAgain
 	
 	li $s1, 0
 	loopMapAndSet()
@@ -827,15 +845,16 @@ checkSize:	# check size ship
 	addi $t5, $t5, 1
 	addi $t6, $t6, 1
 	
-	sub $t7, $t5, $s2  	# this size's ship - size 	if = 0 -> ==
-	sub $t8, $t6, $s2
-	and $t0, $t7, $t8		# and together if == 0 	-> same size
-	bne $t0, 0, setShipError2Catching
+	lw $s2, 8($sp)
+	beq $t5, $s2, checkSize1 	# this size's ship - size 	if = 0 -> ==
+	beq $t6, $s2, checkSize1
+	j setShipError2Catching
 	# check overlap
 		# For loop to check coordinates is placed or not
+checkSize1:
 	beq $t5, 1, rowPlace
 	beq $t6, 1, colPlace
-	 
+	j setShipError2Catching
 rowPlace:
 	blt $t2, $t4, setRowFor2
 setRowFor1: 
@@ -853,7 +872,7 @@ setColFor2:
 setShipError1Catching: 	
 	lw $s2, 8($sp)
 	lw $s1, 4($sp)
-	lw $ra, 0($sp)
+	#lw $ra, 0($sp)
 	addi $sp, $sp, 12
 
  	jal alignInputFunction
@@ -868,7 +887,7 @@ setShipError1Catching:
 setShipError2Catching:
 	lw $s2, 8($sp)
 	lw $s1, 4($sp)
-	lw $ra, 0($sp)
+	#lw $ra, 0($sp)
 	addi $sp, $sp, 12
 
  	jal alignInputFunction
@@ -883,7 +902,7 @@ setShipError2Catching:
 setShipError3Catching:
 	lw $s2, 8($sp)
 	lw $s1, 4($sp)
-	lw $ra, 0($sp)
+	#lw $ra, 0($sp)
 	addi $sp, $sp, 12
 
 	jal alignInputFunction
